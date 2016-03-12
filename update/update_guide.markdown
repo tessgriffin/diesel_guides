@@ -122,3 +122,76 @@ There are a few differences from our publish post example. First on the first li
 We say that the changes are equal to a new UpdatePost struct we define, where the id equals the id we pass in, the title is a string of `"Updated title"` and we leave the body alone.
 
 Then, we save the changes to the post borrowing our connection. Try it out! Try updating a post you've published from the diesel tutorial. `cargo run --bin update_post_with_struct 1`. When you run `cargo run --bin show_posts` you should see your updated title!
+
+## Updating a Post at the Model
+
+Now that we've seen how to difine a struct in the `update_post_with_struct` file, let's extract that functionality to the model level. We'll add this code to the bottom of our existing `models.rs` file.
+
+```rust
+/// src/models.rs
+
+#[changeset_for(posts)]
+pub struct UpdatePost<'a> {
+    pub id: i32,
+    pub title: &'a str,
+    pub body: Option<&'a str>,
+}
+
+impl<'a> UpdatePost<'a> {
+    pub fn new(id: i32, title: &'a str, body: Option<&'a str>) -> Self {
+        UpdatePost {
+            id: id,
+            title: title,
+            body: body,
+        }
+    }
+}
+```
+
+First, we're using Diesel's changeset_for to define a struct that we'll want to update the post. In this struct we want to be able to access the attributes of id, title, and body. We also define the types these attributes will be. 
+
+Notice that we say `Option<&'a str>` for the body. That means that we'll let the body be optional.
+
+Then, we have to implement the UpdatePost by defining a new funtion. This new function takes an id, title, and body that's optional and returns self. This is the funtion that we'll be calling in our new `update_post.rs` file.
+
+Next, let's create an `update_post.rs` file to test this functionality.
+
+```rust
+extern crate diesel_demo;
+extern crate diesel;
+
+use self::diesel::prelude::*;
+use self::diesel_demo::*;
+use self::diesel_demo::models::{Post, UpdatePost};
+use std::env::args;
+```
+
+This is identical to the setup in `publish_post` except in the models line, we also include `UpdatePost` which is what we defined earlier.
+
+Now for our main function:
+
+```rust
+fn main() {
+    use diesel_demo::schema::posts::dsl::{posts, title, body};
+
+    let id = args().nth(1).expect("update_post requires a post id")
+        .parse().expect("Invalid ID");
+    let connection = establish_connection();
+
+    let changes = UpdatePost::new(id, "Wowowowie", Some("Stuff"));
+
+
+    let updated_post = changes.save_changes::<Post>(&connection)
+        .expect(&format!("Unable to find post {}", id));;
+
+    println!("Updated Post {}", updated_post.title);
+}
+```
+
+Our establishing of the connection is the same as before.
+
+We pass the id, a title, and a body to our UpdatePost::new funtion. We say `Some("Stuff")` to indicate that this body could be optional. We set that to be the changes.
+
+To the changes we call `save_changes` passing it the borrowed connection to the database, and that's it!
+
+Now, when you run `cargo run --bin update_post 1` you'll see the updated title.
